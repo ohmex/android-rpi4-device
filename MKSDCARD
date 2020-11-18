@@ -1,0 +1,140 @@
+#!/bin/bash
+
+SDCARD="${1}"
+
+usage() {
+  echo
+	echo "Usage: ${0} [SDCARD]"
+	echo "Where SDCARD is your SD card device node, for example: /dev/sdx"
+	echo "You will require *root* privileges in order to use this script."
+	echo
+}
+
+confirm() {
+  echo
+	echo "You are about to totally decimate the following device node: ${SDCARD}"
+	echo
+	echo "If you are sure you want to continue? (Please write \"YES\" in all caps)"
+	echo
+	read CONTUNUE
+
+	if [ "${CONTUNUE}" != "YES" ]; then
+		echo "User didn't write \"YES\"... ABORTING!"
+		exit 1
+	fi
+}
+
+section() {
+	sync
+	echo "*****************************************************************************************"
+	echo "> ${*}"
+	echo "*****************************************************************************************"
+	sleep 1
+}
+
+PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+if [ -z "${SDCARD}" ] || [ "${SDCARD}" = "-h" ] || [ "${SDCARD}" = "--help" ]; then
+	usage
+	exit 0
+fi
+
+if [ ! -b "${SDCARD}" ]; then
+	echo "${SDCARD} is not a block device!"
+	exit 1
+fi
+
+FDISK=`which fdisk`
+MKFS_EXT4=`which mkfs.ext4`
+MKFS_VFAT=`which mkfs.vfat`
+TAR=`which tar`
+
+if [ -z "${FDISK}" ] || [ -z "${MKFS_EXT4}" ] || [ -z "${MKFS_VFAT}" ] || [ -z "${TAR}" ]; then
+	echo "Missing dependencies:\n"
+	echo "FDISK=${FDISK}"
+	echo "MKFS_EXT4=${MKFS_EXT4}"
+	echo "MKFS_VFAT=${MKFS_VFAT}"
+	echo "TAR=${TAR}"
+	exit 1
+fi
+
+confirm
+
+PARTITION_PREFIX=""
+if [ ${SDCARD} = "/dev/mmcblk0" ]
+then
+	echo "Found mmcblk0 device"
+	PARTITION_PREFIX="p"
+fi
+
+section "Unmounting partitions..."
+umount ${SDCARD}${PARTITION_PREFIX}1
+umount ${SDCARD}${PARTITION_PREFIX}2
+umount ${SDCARD}${PARTITION_PREFIX}3
+umount ${SDCARD}${PARTITION_PREFIX}4
+sync
+
+section "Partitioning SD card..."
+${FDISK} ${SDCARD} <<END
+o
+n
+p
+1
+
++128M
+n
+p
+2
+
++1024M
+n
+p
+3
+
++128M
+n
+p
+
+
+t
+1
+c
+a
+1
+w
+END
+
+sync
+sleep 1
+
+mkdir .mnt
+
+section "Formatting partitions..."
+${MKFS_VFAT} -F 32 -n boot -I "${SDCARD}${PARTITION_PREFIX}1" || exit 1
+${MKFS_EXT4} -L userdata "${SDCARD}${PARTITION_PREFIX}4" || exit 1
+sync
+
+section "Populating boot partition..."
+mount "${SDCARD}${PARTITION_PREFIX}1" .mnt || exit 2
+mkdir -p .mnt/overlays
+cp device/arpi/rpi4/boot/* .mnt
+cp kernel/arpi/arch/arm64/boot/Image.gz .mnt
+cp kernel/arpi/arch/arm64/boot/dts/broadcom/bcm2711-rpi-4-b.dtb .mnt
+cp kernel/arpi/arch/arm64/boot/dts/overlays/vc4-kms-v3d-pi4.dtbo .mnt/overlays/
+cp out/target/product/rpi4/ramdisk.img .mnt
+sync
+sleep 1
+umount .mnt
+sync
+
+section "Imaging vendor & system partitions..."
+dd if=out/target/product/rpi4/system.img of=${SDCARD}${PARTITION_PREFIX}2 bs=1M
+dd if=out/target/product/rpi4/vendor.img of=${SDCARD}${PARTITION_PREFIX}3 bs=1M
+sync
+sleep 1
+
+rmdir .mnt
+
+section "Finished!"
+
+exit 0
