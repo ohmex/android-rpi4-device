@@ -1,0 +1,6 @@
+android_app {
+    name: "RpCamera",
+    platform_apis: true,
+    srcs: ["src/**/*.kt"],
+    resource_dirs: ["res"],
+}
