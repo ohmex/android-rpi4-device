@@ -1,0 +1,180 @@
+arpi 11 : framework patch
+Peter Yoon edited this page on Oct 11 · 10 revisions
+Remove resolv_gold_test from platform_testing
+
+Apply following change under platform_testing/
+
+build/tasks/tests/native_test_list.mk
+@@ line 111
+     puffin_unittest \
+     recovery_unit_test \
+-    resolv_gold_test \
+     resolv_integration_test \
+     resolv_unit_test \
+
+Disable HDMI_CEC in TvSettings
+
+To enable Remotes & Accessories sub-menu
+
+Apply following changes under packages/apps/TvSettings
+
+Settings/src/com/android/tv/settings/accessories/AddAccessoryActivity.java
+@@ line 218
+                     fm.getFragment(savedInstanceState,
+                             SAVED_STATE_CONTENT_FRAGMENT);
+         }
+-        sendCecOtpCommand((result) -> {
+-            if (result == HdmiControlManager.RESULT_SUCCESS) {
+-                Log.i(TAG, "One Touch Play successful");
+-            } else {
+-                Log.i(TAG, "One Touch Play failed");
+-            }
+-        });
+ 
+         rearrangeViews();
+
+Disable Low Power Mode of Bluetooth
+
+Patch from https://github.com/android-rpi/device_arpi_rpi4/issues/25#issuecomment-673996293
+
+Apply following changes under hardware/interfaces/
+
+bluetooth/1.0/default/vendor_interface.cc
+@@ line 343 @@ void VendorInterface::OnFirmwareConfigured(
+   lib_interface_->op(BT_VND_OP_GET_LPM_IDLE_TIMEOUT, &lpm_timeout_ms);
+   ALOGI("%s: lpm_timeout_ms %d", __func__, lpm_timeout_ms);
+
+-  bt_vendor_lpm_mode_t mode = BT_VND_LPM_ENABLE;
++  bt_vendor_lpm_mode_t mode = BT_VND_LPM_DISABLE;
+   lib_interface_->op(BT_VND_OP_LPM_SET_MODE, &mode);
+
+Add HW reset on Bluetooth HCI startup_timer_expired()
+
+Workaround for bt_hci timeout. Information from following links :
+
+https://github.com/raspberrypi/linux/issues/2832
+
+https://github.com/raspberrypi/userland/blob/master/host_applications/linux/apps/vcmailbox/vcmailbox.c
+
+Apply following patch under system/bt/
+
+hci/src/hci_layer.cc
+@@ line 375
+   startup_future = NULL;
+ }
+
++#include <sys/ioctl.h>
++static void hw_reset(bool reset) {
++  unsigned buf[8] = { 8 * 4, 0, 0x38041, 8, 8, 128, 0, 0};
++  buf[6] = reset ? 0 : 1;
++  int fd = open("/dev/vcio", 0);
++  if (fd >= 0) {
++    ioctl(fd, _IOWR(100, 0, char *), buf);
++    close(fd);
++  }
++}
+
+ static void startup_timer_expired(UNUSED_ATTR void* context) {
+   LOG_ERROR(LOG_TAG, "%s", __func__);
+
+   LOG_EVENT_INT(BT_HCI_TIMEOUT_TAG_NUM, HCI_STARTUP_TIMED_OUT);
+
+   hci_close();
+   if (abort_timer.IsScheduled()) {
+     LOG_ERROR(LOG_TAG, "%s: waiting for abort_timer", __func__);
+     return;
+   }
++  hw_reset(true);
++  sleep(2);
++  hw_reset(false);
+   abort();
+ }
+
+Enable audio & camera hal 64bit build
+
+Apply following changes under hardware/interfaces/
+
+audio/common/all-versions/default/service/Android.bp
+@@ line 9
+     // having two binaries installable to the same location even if they are
+     // not installed in the same build.
+-    compile_multilib: "32",
+     srcs: ["service.cpp"],
+
+
+camera/provider/2.5/default/Android.bp
+@@ line 155
+     relative_install_path: "hw",
+     srcs: ["external-service.cpp"],
+-    compile_multilib: "32",
+     init_rc: ["android.hardware.camera.provider@2.5-external-service.rc"],
+     shared_libs: [
+
+Enable cameraserver & mediaserver 64bit build
+
+Apply following changes under frameworks/av/
+
+camera/cameraserver/Android.bp
+@@ line 38
+         "android.hardware.camera.device@3.4",
+     ],
+-    compile_multilib: "32",
+     cflags: [
+         "-Wall",
+
+
+media/mediaserver/Android.bp
+@@ line 34
+        "frameworks/av/services/mediaresourcemanager",
+     ],
+
+     // back to 32-bit, b/126502613
+-    compile_multilib: "32",
+
+     init_rc: ["mediaserver.rc"],
+
+
+services/mediacodec/Android.bp
+@@ line 88
+         "android.hidl.memory@1.0",
+     ],
+
+-    runtime_libs: [
+-        "libstagefright_soft_aacdec",
+-        "libstagefright_soft_aacenc",
+-        "libstagefright_soft_amrdec",
+-        "libstagefright_soft_amrnbenc",
+-        "libstagefright_soft_amrwbenc",
+-        "libstagefright_soft_avcdec",
+-        "libstagefright_soft_avcenc",
+-        "libstagefright_soft_flacdec",
+-        "libstagefright_soft_flacenc",
+-        "libstagefright_soft_g711dec",
+-        "libstagefright_soft_gsmdec",
+-        "libstagefright_soft_hevcdec",
+-        "libstagefright_soft_mp3dec",
+-        "libstagefright_soft_mpeg2dec",
+-        "libstagefright_soft_mpeg4dec",
+-        "libstagefright_soft_mpeg4enc",
+-        "libstagefright_soft_opusdec",
+-        "libstagefright_soft_rawdec",
+-        "libstagefright_soft_vorbisdec",
+-        "libstagefright_soft_vpxdec",
+-        "libstagefright_soft_vpxenc",
+-        "libstagefright_softomx_plugin",
+-    ],
+
+     // OMX interfaces force this to stay in 32-bit mode;
+-    compile_multilib: "32",
+
+     init_rc: ["android.hardware.media.omx@1.0-service.rc"],
+
+Replace following file under frameworks/av with mediacodec-arm64.policy
+
+services/mediacodec/seccomp_policy/mediacodec-arm64.policy 
+
+After build and android working on the device, Video playback could be tested by 'adb install Cobalt_arm64.apk'
+
+(Select 720p in video-quality menu. 1080p has problem)
+
+The apk is built from https://www.cobalt.dev/development/setup-android.html

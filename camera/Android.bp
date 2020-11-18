@@ -1,0 +1,29 @@
+cc_library_shared {
+    name: "camera.rpi4",
+    relative_install_path: "hw",
+    proprietary: true,
+    srcs: [
+	"CameraFactory.cpp",
+	"CameraHal.cpp",
+	"CameraHardware.cpp",
+	"Converter.cpp",
+	"SurfaceDesc.cpp",
+	"SurfaceSize.cpp",
+	"Utils.cpp",
+	"V4L2Camera.cpp",
+    ],
+    include_dirs: [
+        "system/media/camera/include",
+    ],
+    shared_libs: [
+        "libcutils",
+        "libjpeg",
+        "liblog",
+        "libui",
+        "libutils",
+        "libbinder",
+    ],
+    static_libs: [
+        "android.hardware.camera.common@1.0-helper",
+    ],
+}

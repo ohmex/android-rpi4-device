@@ -1,0 +1,29 @@
+#Kernel
+kernel=Image.gz
+device_tree=bcm2711-rpi-4-b.dtb
+
+#Enable 64bit
+arm_64bit=1
+
+#Audio jack
+dtparam=audio=on
+
+# Graphics acceleration
+dtoverlay=vc4-kms-v3d-pi4
+
+# Ramdisk
+initramfs ramdisk.img followkernel
+
+#Debug serial
+enable_uart=1
+
+# Camera
+gpu_mem=128
+start_x=1
+
+# Display
+hdmi_force_hotplug=1
+#hdmi_drive=2
+#hdmi_group=1
+#hdmi_mode=4
+disable_overscan=0
