@@ -66,6 +66,11 @@ then
 	echo "Found mmcblk0 device"
 	PARTITION_PREFIX="p"
 fi
+if [[ "${SDCARD}" == *"/dev/loop"* ]]
+then
+	echo "Found loop device"
+	PARTITION_PREFIX="p"
+fi
 
 section "Unmounting partitions..."
 umount ${SDCARD}${PARTITION_PREFIX}1

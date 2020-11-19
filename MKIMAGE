@@ -1,0 +1,20 @@
+#!/bin/bash
+NAME=sdcard
+DATE=`date +"%Y-%m-%d_%H:%M:%S"`
+IMAGE=$NAME-$DATE.img
+echo "Removing old image files..."
+rm -f $NAME*
+sync
+echo "Creating empty image file $IMAGE ..."
+dd if=/dev/zero of=$IMAGE bs=1MiB count=4096
+#dd if=/dev/zero of=$IMAGE bs=1024 count=4194304
+device=`sudo losetup -fP --find --show $IMAGE`
+echo "Mounted the created image file on loop device: "$device
+lsblk $device
+echo "Stating to create partitions & populate image"
+sudo ./MKSDCARD $device
+echo "Image creation completed, unmounting loop device"
+lsblk $device
+sudo losetup -d $device
+sync
+echo "DONE!"
